@@ -1,30 +1,41 @@
 use strict;
-use warnings FATAL => 'all';
-use Socket;
+use warnings;
+use utf8;
+use Carp;
+use Encode;
+use IO::Socket;
 
-my $sock_recive;
-socket($sock_recive, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
-    or die "Cannot create socket: $!";
+my $server_socket = IO::Socket::INET->new(
+  LocalPort => 2525,
+  Proto     => 'tcp',
+  Listen    => 1,
+  ReuseAddr => 1,
+);
 
-my $local_port = 9000;
+Carp::croak "Could not create socket: $!" unless $server_socket;
+my $encoder = Encode::find_encoding('utf8');
 
-my $pack_addr = sockaddr_in($local_port, INADDR_ANY);
+my $welcome_msg = <<'EOS';
+welcome oi
+EOS
 
-bind($sock_recive, $pack_addr)
-    or die "Cannot bindL: $!";
 
-listen($sock_recive, SOMAXCONN)
-    or die "Cannot listen: $!";
+while(1) {
+    my $client_socket = $server_socket->accept;
+    print $client_socket "$welcome_msg\n";
 
-my $sock_client;
-
-while(accept( $sock_client, $sock_recive )) {
-    my $content;
-
-    while(my $line = <$sock_client>) {
-        $content .= $line;
+    while(my $msg = <$client_socket>) {
+        $msg = $encoder->decode($msg);
+        $msg =~ s/\x0D?\x0A?$//;
+        if ($msg =~ m/(quit|q|exit)/i) {
+            print "Connection closed.\n";
+            last;
+        }
+        my $encoded = $encoder->encode($msg);
+        print "Client>> $encoded\n";
+        print $client_socket "Server>> $encoded\n";
     }
-
-    print $sock_client "echo: '$content'";
-    close $sock_client;
+    $client_socket->close;
 }
+
+$server_socket->close;
