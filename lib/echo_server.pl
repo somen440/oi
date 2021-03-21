@@ -5,37 +5,50 @@ use Carp;
 use Encode;
 use IO::Socket;
 
+my $port = 2525;
 my $server_socket = IO::Socket::INET->new(
-  LocalPort => 2525,
+  LocalPort => $port,
   Proto     => 'tcp',
-  Listen    => 1,
+  Listen    => 10,
   ReuseAddr => 1,
 );
 
 Carp::croak "Could not create socket: $!" unless $server_socket;
+print "Listening on $port...\n";
+
 my $encoder = Encode::find_encoding('utf8');
 
 my $welcome_msg = <<'EOS';
-welcome oi
+おい
 EOS
 
-
-while(1) {
+while (1) {
     my $client_socket = $server_socket->accept;
+    my $client_addr = gethostbyaddr($client_socket->peeraddr, AF_INET);
+    my $client_port = $client_socket->peerport;
+    print "接続あり: $client_addr:$client_port\n";
+
     print $client_socket "$welcome_msg\n";
-
-    while(my $msg = <$client_socket>) {
-        $msg = $encoder->decode($msg);
-        $msg =~ s/\x0D?\x0A?$//;
-        if ($msg =~ m/(quit|q|exit)/i) {
-            print "Connection closed.\n";
-            last;
+    if (my $pid = fork()) {
+        # 親プロセス
+        print "親プロセス($$): 引き続き $port を見張ります。\n";
+        print "親プロセス($$): クライアントの相手はプロセス $pid が行います。\n";
+        $client_socket->close;
+        next;
+    } else {
+        # 子プロセス
+        while(my $msg = <$client_socket>) {
+            $msg = $encoder->decode($msg);
+            $msg =~ s/\x0D?\x0A?$//;
+            if ($msg =~ m/(quit|q|exit)/i) {
+                print "Connection closed.\n";
+                last;
+            }
+            my $encoded = $encoder->encode($msg);
+            print "Client>> $encoded\n";
+            print $client_socket "Server>> $encoded\n";
         }
-        my $encoded = $encoder->encode($msg);
-        print "Client>> $encoded\n";
-        print $client_socket "Server>> $encoded\n";
+        $client_socket->close;
+        exit;
     }
-    $client_socket->close;
 }
-
-$server_socket->close;
