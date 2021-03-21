@@ -10,7 +10,7 @@ my $server_socket = IO::Socket::INET->new(
   LocalPort => $port,
   Proto     => 'tcp',
   Listen    => 10,
-  ReuseAddr => 1,
+  Broadcast => 1,
 );
 
 Carp::croak "Could not create socket: $!" unless $server_socket;
@@ -44,11 +44,13 @@ while (1) {
                 print "Connection closed.\n";
                 last;
             }
-            my $encoded = $encoder->encode($msg);
+            my $encoded = $encoder->encode("おい $msg !!");
             print "Client>> $encoded\n";
-            print $client_socket "Server>> $encoded\n";
+            print $client_socket "$encoded\n";
         }
         $client_socket->close;
         exit;
     }
 }
+
+$server_socket->close;

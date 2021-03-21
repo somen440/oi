@@ -1,33 +1,28 @@
 use strict;
 use warnings FATAL => 'all';
-use Socket;
+use Carp;
+use Encode;
+use IO::Socket;
 
-my $sock;
-socket($sock, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
-    or die "Cannot create socket: $!";
+my $socket = IO::Socket::INET->new(
+  PeerAddr => 'localhost',
+  PeerPort => 2525,
+  Proto    => 'tcp',
+);
 
-my $remote_host = 'localhost';
-my $packed_remote_host = inet_aton($remote_host)
-    or die "Cannot pack $remote_host: $!";
+Carp::croak "Could not create socket: $!" unless $socket;
 
-my $remote_port = 9000;
+my $encoder = Encode::find_encoding('utf8');
+while(1) {
+    print '> ';
+    my $msg = <STDIN>;
+    $msg = $encoder->decode($msg);
+    $msg =~ s/\x0D?\x0A?$//;
+    $msg = $encoder->encode($msg);
+    print $socket "$msg\n";
 
-my $sock_addr = sockaddr_in($remote_port, $packed_remote_host)
-    or die "Cannot pack $remote_host:$remote_port: $!";
-
-connect($sock, $sock_addr)
-    or die "Cannot connect $remote_host:$remote_port: $!";
-
-my $old_handle = select $sock;
-$| = 1;
-select $old_handle;
-
-print $sock "Hello";
-
-shutdown $sock, 1;
-
-while (my $line = <$sock>) {
-    print $line;
+    $msg = <$socket>;
+    $msg = $encoder->decode($msg);
+    print $encoder->encode($msg);
 }
-
-close $sock;
+$socket->close;
